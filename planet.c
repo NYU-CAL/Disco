@@ -55,7 +55,7 @@ double phigrav( double M , double r , double eps , int type)
     else if(type == PLSURFACEGRAV)
     {
         return M*r; // M is gravitational acceleration
-                    // only makes sense if grav2D is on
+                    // only makes sense if grav2D = 2
     }
     else if(type == PLQUAD)
     {
@@ -104,7 +104,7 @@ double fgrav( double M , double r , double eps , int type)
     else if(type == PLSURFACEGRAV)
     {
         return M; // M is gravitational acceleration
-                  // only makes sense if grav2D is on
+                  // only makes sense if grav2D = 2
     }
     else if(type == PLQUAD)
     {

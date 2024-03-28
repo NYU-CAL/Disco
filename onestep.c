@@ -4,6 +4,9 @@
 #include "profiler.h"
 #include "analysis.h"
 #include "planet.h"
+#if CT_MODE > 0
+#include "bfields.h"
+#endif
 
 //void AMR( struct domain * ); 
 void move_BCs( struct domain * , double );
@@ -26,14 +29,6 @@ void plm_trans( struct domain * , struct face * , int , int );
 void phi_flux( struct domain * , double dt );
 void trans_flux( struct domain * , double dt , int );
 void add_source( struct domain * , double dt );
-
-#if CT_MODE > 0
-void avg_Efields( struct domain * );
-void update_B_fluxes( struct domain * , double );
-void subtract_advective_B_fluxes( struct domain * );
-void check_flipped( struct domain * , int );
-void flip_fluxes( struct domain * , int );
-#endif
 
 void boundary_trans( struct domain * , int );
 void exchangeData( struct domain * , int );

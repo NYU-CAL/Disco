@@ -2,14 +2,20 @@
 #include "paul.h"
 #include "geometry.h"
 #include "hydro.h"
+#include "bfields.h"
 
 void initial( double * , double * ); 
 void setup_faces( struct domain * , int );
 int get_num_rzFaces( int , int , int );
-void B_faces_to_cells( struct domain * , int );
-double bfield_scale_factor(double x, int dim);
 void calc_prim(struct domain *);
+
+static int CT_Solver = 0;
  
+void setBfieldsParams(struct domain *theDomain)
+{
+    CT_Solver = theDomain->theParList.CT_Solver;
+}
+
 void set_B_fields( struct domain * theDomain ){
 
    int i,j,k;
@@ -314,8 +320,6 @@ void B_faces_to_cells( struct domain * theDomain , int type ){
    }
 }
 
-void make_edge_adjust( struct domain * , double );
-
 void update_B_fluxes( struct domain * theDomain , double dt ){
 
    struct face * theFaces = theDomain->theFaces_1;
@@ -391,28 +395,33 @@ void update_B_fluxes( struct domain * theDomain , double dt ){
    } 
 }
 
-void add_E_phi( double * phiL , double * phiR , double * phiD , double * phiU , double Edldt ){
-   *phiL -= Edldt;
-   *phiR += Edldt;
-   *phiU -= Edldt;
-   *phiD += Edldt;
+void add_E_phi(double *phiL, double *phiR, double *phiD, double *phiU,
+               double Edldt )
+{
+    *phiL -= Edldt;
+    *phiR += Edldt;
+    *phiU -= Edldt;
+    *phiD += Edldt;
 }
-
 
 void avg_Efields( struct domain * theDomain ){
 
-   int i,j,k;
-   struct cell ** theCells = theDomain->theCells;
-   int Nr = theDomain->Nr;
-   int Nz = theDomain->Nz;
-   int * Np = theDomain->Np;
+    if(NUM_EDGES < 4)
+        return;
 
-   if(NUM_EDGES >= 4)
-   {
-       for( j=0 ; j<Nr ; ++j ){
-          for( k=0 ; k<Nz ; ++k ){
-             int jk = j+Nr*k;
-             for( i=0 ; i<Np[jk] ; ++i ){
+    int i,j,k;
+    struct cell ** theCells = theDomain->theCells;
+    int Nr = theDomain->Nr;
+    int Nz = theDomain->Nz;
+    int * Np = theDomain->Np;
+
+    for( j=0 ; j<Nr ; ++j )
+    {
+        for( k=0 ; k<Nz ; ++k )
+        {
+            int jk = j+Nr*k;
+            for( i=0 ; i<Np[jk] ; ++i )
+            {
                 struct cell * c  = theCells[jk]+i;
                 int ip = (i+1)%Np[jk];
                 struct cell * cp = theCells[jk]+ip;
@@ -433,128 +442,34 @@ void avg_Efields( struct domain * theDomain ){
                 cp->B[2] = Bl_avg;
                 cp->B[3] = Br_avg;
 
-                if( NUM_EDGES == 8 ){
-                   El_avg = .5*( c->E[4] + cp->E[6] );
-                   Er_avg = .5*( c->E[5] + cp->E[7] );
+                if( NUM_EDGES == 8 )
+                {
+                    El_avg = .5*( c->E[4] + cp->E[6] );
+                    Er_avg = .5*( c->E[5] + cp->E[7] );
 
-                    c->E[4] = El_avg;
-                    c->E[5] = Er_avg;
-                   cp->E[6] = El_avg;
-                   cp->E[7] = Er_avg;
+                     c->E[4] = El_avg;
+                     c->E[5] = Er_avg;
+                    cp->E[6] = El_avg;
+                    cp->E[7] = Er_avg;
 
-                   Bl_avg = .5*( c->B[4] + cp->B[6] );
-                   Br_avg = .5*( c->B[5] + cp->B[7] );
+                    Bl_avg = .5*( c->B[4] + cp->B[6] );
+                    Br_avg = .5*( c->B[5] + cp->B[7] );
 
-                    c->B[4] = Bl_avg;
-                    c->B[5] = Br_avg;
-                   cp->B[6] = Bl_avg;
-                   cp->B[7] = Br_avg;
+                     c->B[4] = Bl_avg;
+                     c->B[5] = Br_avg;
+                    cp->B[6] = Bl_avg;
+                    cp->B[7] = Br_avg;
                 }
 
-             }
-          }
-       }
-   }
+            }
+        }
+    }
 
-   int Nf = theDomain->fIndex_r[theDomain->N_ftracks_r];
-   struct face * theFaces = theDomain->theFaces_1;
-  
-   if(NUM_EDGES >= 4)
-   {
-       int n;
-
-       for( n=0 ; n<Nf ; ++n ){
-          struct face * f = theFaces+n;
-          struct cell * c1;
-          struct cell * c2;
-          if( f->LRtype == 0 ){
-             c1 = f->L;
-             c2 = f->R;
-          }else{
-             c1 = f->R;
-             c2 = f->L;
-          }
-          double p1 = c1->piph;
-          double p2 = c2->piph;
-          double dp1 = get_dp(p2,p1);
-          double dp2 = c2->dphi - dp1;
-          if( f->LRtype == 0 ){
-             double Eavg = ( dp2*c2->E[0] + dp1*c2->E[2] )/(dp1+dp2);
-             double Bavg = ( dp2*c2->B[0] + dp1*c2->B[2] )/(dp1+dp2);
-             f->E = .5*(f->L->E[1] + Eavg);
-             f->B = .5*(f->L->B[1] + Bavg);
-          }else{
-             double Eavg = ( dp2*c2->E[1] + dp1*c2->E[3] )/(dp1+dp2);
-             double Bavg = ( dp2*c2->B[1] + dp1*c2->B[3] )/(dp1+dp2);
-             f->E = .5*(f->R->E[0] + Eavg);
-             f->B = .5*(f->R->B[0] + Bavg);
-          }
-       }
-
-       for( n=0 ; n<Nf ; ++n ){
-          struct face * f = theFaces+n;
-          if( f->LRtype==0 ){
-             f->L->E[1] = f->E;
-             f->L->B[1] = f->B;
-          }else{
-             f->R->E[0] = f->E;
-             f->R->B[0] = f->B;
-          }
-          f->E = 0.0;
-          f->B = 0.0;
-       }
-   }
+    if(CT_Solver == 0)
+        avg_Efields_Extra_Duffell16(theDomain);
+    else if(CT_Solver == 1)
+        avg_Efields_Extra_GardinerStone05(theDomain);
    
-
-   if( NUM_EDGES == 8 ){
-//REPEAT THE ABOVE FOR VERTICALLY-ORIENTED FACES & RADIAL EDGES
-      Nf = theDomain->fIndex_z[theDomain->N_ftracks_z];
-      theFaces = theDomain->theFaces_2;
-      int n;
-      for( n=0 ; n<Nf ; ++n ){
-         struct face * f = theFaces+n;
-         struct cell * c1;
-         struct cell * c2;
-         if( f->LRtype == 0 ){ 
-            c1 = f->L;
-            c2 = f->R;
-         }else{
-            c1 = f->R;
-            c2 = f->L;
-         }    
-         double p1 = c1->piph;
-         double p2 = c2->piph;
-         double dp1 = get_dp(p2,p1);
-         double dp2 = c2->dphi - dp1; 
-         if( f->LRtype == 0 ){ 
-            double Eavg = ( dp2*c2->E[4] + dp1*c2->E[6] )/(dp1+dp2);
-            double Bavg = ( dp2*c2->B[4] + dp1*c2->B[6] )/(dp1+dp2);
-            f->E = .5*(f->L->E[5] + Eavg);
-            f->B = .5*(f->L->B[5] + Bavg);
-         }else{
-            double Eavg = ( dp2*c2->E[5] + dp1*c2->E[7] )/(dp1+dp2);
-            double Bavg = ( dp2*c2->B[5] + dp1*c2->B[7] )/(dp1+dp2);
-            f->E = .5*(f->R->E[4] + Eavg);
-            f->B = .5*(f->R->B[4] + Bavg);
-         }    
-      }
-
-      for( n=0 ; n<Nf ; ++n ){
-         struct face * f = theFaces+n;
-         if( f->LRtype==0 ){
-            f->L->E[5] = f->E;
-            f->L->B[5] = f->B;
-         }else{
-            f->R->E[4] = f->E;
-            f->R->B[4] = f->B;
-         }    
-         f->E = 0.0; 
-         f->B = 0.0; 
-      }
-
-   }
-   
-
    //E ALONG THE POLE...
    if(theDomain->NgRa == 0 && NUM_EDGES >= 4)
    {
@@ -660,6 +575,435 @@ void avg_Efields( struct domain * theDomain ){
           }
        }
    }
+}
+
+
+void avg_Efields_Extra_Duffell16( struct domain * theDomain ) 
+{
+    // Perform extra averaging for Er and Ez according to Duffell 2016
+    int Nf = theDomain->fIndex_r[theDomain->N_ftracks_r];
+    struct face * theFaces = theDomain->theFaces_1;
+
+    int n;
+
+    for( n=0 ; n<Nf ; ++n )
+    {
+        //This loop computes E & B interp and stores it in the face
+        //whose forward edge is the interpolated edge
+        struct face * f = theFaces+n;
+        struct cell * c1;
+        struct cell * c2;
+        if( f->LRtype == 0 ){
+            c1 = f->L;
+            c2 = f->R;
+        }else{
+            c1 = f->R;
+            c2 = f->L;
+        }
+        // c1's front face is trailing c2's ==> c1's front face sets the
+        // forward boundary of this face.
+
+        double p1 = c1->piph; //equal to forward phi of this face
+        double p2 = c2->piph; //past the forward phi of this faces
+        double dp1 = get_dp(p2,p1); //positive, will be in [0, pi]. 
+                                    //distance from c2's front face to
+                                    //forward phi of this face.
+        double dp2 = c2->dphi - dp1; //positive.  distance from c2's back
+                                     //face to forward phi of this face.
+        if( f->LRtype == 0 )
+        {
+            double Eavg = ( dp2*c2->E[0] + dp1*c2->E[2] )/(dp1+dp2);
+            double Bavg = ( dp2*c2->B[0] + dp1*c2->B[2] )/(dp1+dp2);
+            f->E = .5*(f->L->E[1] + Eavg);
+            f->B = .5*(f->L->B[1] + Bavg);
+        }
+        else
+        {
+            double Eavg = ( dp2*c2->E[1] + dp1*c2->E[3] )/(dp1+dp2);
+            double Bavg = ( dp2*c2->B[1] + dp1*c2->B[3] )/(dp1+dp2);
+            f->E = .5*(f->R->E[0] + Eavg);
+            f->B = .5*(f->R->B[0] + Bavg);
+        }
+    }
+
+    for( n=0 ; n<Nf ; ++n )
+    {
+        struct face * f = theFaces+n;
+        if( f->LRtype==0 )
+        {
+            f->L->E[1] = f->E;
+            f->L->B[1] = f->B;
+        }
+        else
+        {
+            f->R->E[0] = f->E;
+            f->R->B[0] = f->B;
+        }
+        f->E = 0.0;
+        f->B = 0.0;
+    }
+
+    if( NUM_EDGES == 8 )
+    {
+        //REPEAT THE ABOVE FOR VERTICALLY-ORIENTED FACES & RADIAL EDGES
+        Nf = theDomain->fIndex_z[theDomain->N_ftracks_z];
+        theFaces = theDomain->theFaces_2;
+        int n;
+        for( n=0 ; n<Nf ; ++n )
+        {
+            struct face * f = theFaces+n;
+            struct cell * c1;
+            struct cell * c2;
+            if( f->LRtype == 0 )
+            { 
+                c1 = f->L;
+                c2 = f->R;
+            }
+            else
+            {
+                c1 = f->R;
+                c2 = f->L;
+            }    
+            double p1 = c1->piph;
+            double p2 = c2->piph;
+            double dp1 = get_dp(p2,p1);
+            double dp2 = c2->dphi - dp1; 
+            if( f->LRtype == 0 )
+            { 
+                double Eavg = ( dp2*c2->E[4] + dp1*c2->E[6] )/(dp1+dp2);
+                double Bavg = ( dp2*c2->B[4] + dp1*c2->B[6] )/(dp1+dp2);
+                f->E = .5*(f->L->E[5] + Eavg);
+                f->B = .5*(f->L->B[5] + Bavg);
+            }
+            else
+            {
+                double Eavg = ( dp2*c2->E[5] + dp1*c2->E[7] )/(dp1+dp2);
+                double Bavg = ( dp2*c2->B[5] + dp1*c2->B[7] )/(dp1+dp2);
+                f->E = .5*(f->R->E[4] + Eavg);
+                f->B = .5*(f->R->B[4] + Bavg);
+            }    
+        }
+
+        for( n=0 ; n<Nf ; ++n )
+        {
+            struct face * f = theFaces+n;
+            if( f->LRtype==0 )
+            {
+                f->L->E[5] = f->E;
+                f->L->B[5] = f->B;
+            }
+            else
+            {
+                f->R->E[4] = f->E;
+                f->R->B[4] = f->B;
+            }    
+            f->E = 0.0; 
+            f->B = 0.0; 
+        }
+    }
+}
+void avg_Efields_Extra_GardinerStone05( struct domain * theDomain )
+{
+    int Nr = theDomain->Nr;
+    int Nz = theDomain->Nz;
+    int NgRa = theDomain->NgRa;
+    int NgRb = theDomain->NgRb;
+    int NgZa = theDomain->NgZa;
+    int NgZb = theDomain->NgZb;
+
+    int *fI_r  = theDomain->fIndex_r;
+    struct face *theFaces_r = theDomain->theFaces_1;
+    int Nfr = Nr - 1;
+
+    int kmin = NgZa;
+    int kmax = Nz - NgZb;
+    int jmin = NgRa == 0 ? 0 : NgRa - 1;
+    int jmax = NgRb == 0 ? Nr-1 : Nr - NgRb;
+
+    int k;
+    for(k=kmin; k<kmax; k++)
+    {
+        double zm = theDomain->z_kph[k-1];
+        double zp = theDomain->z_kph[k];
+        double z = get_centroid(zp, zm, 2);
+
+        int j;
+        for(j=jmin; j<jmax; j++)
+        {
+            // j is inner annulus, j+1 the outer.
+            double rmm = theDomain->r_jph[j-1];  // innermost face r
+            double rf = theDomain->r_jph[j];     // r at face between annuli
+            double rpp = theDomain->r_jph[j+1];  // outermote face r
+
+            double rm = get_centroid(rf, rmm, 1); // r of inner annulus
+            double rp = get_centroid(rpp, rf, 1); // r of outer annulus
+
+            int JK = j + Nfr * k;
+
+            int f;
+            for(f=fI_r[JK]; f<fI_r[JK+1]; f++)
+            {
+                //Looping over faces.  fp is the next face.
+                int fp = f < fI_r[JK+1]-1 ? f+1 : fI_r[JK];
+
+                // cell C is shared by the faces. L & R on the other side.
+                struct cell *cC = NULL;
+                struct cell *cL = NULL;
+                struct cell *cR = NULL;
+
+                double rC = 0;
+                double rLR = 0;
+
+                int idx_EB_L = 0;
+                int idx_EB_R = 0;
+
+                if(theFaces_r[f].L == theFaces_r[fp].L)
+                { 
+                    cC = theFaces_r[f].L;
+                    cL = theFaces_r[f].R;
+                    cR = theFaces_r[fp].R;
+                    rC = rm;
+                    rLR = rp;
+                    idx_EB_L = 0;
+                    idx_EB_R = 2;
+                }
+                else if(theFaces_r[f].R == theFaces_r[fp].R)
+                {
+                    cC = theFaces_r[f].R;
+                    cL = theFaces_r[f].L;
+                    cR = theFaces_r[fp].L;
+                    rC = rp;
+                    rLR = rm;
+                    idx_EB_L = 1;
+                    idx_EB_R = 3;
+                }
+                else
+                {
+                    fprintf(stderr, "Faces don't share a cell!\n");
+                }
+
+                double xC[] = {rC,  cC->piph - 0.5*cC->dphi, z};
+                double xL[] = {rLR, cL->piph - 0.5*cL->dphi, z};
+                double xR[] = {rLR, cR->piph - 0.5*cR->dphi, z};
+
+                double EL[3], EC[3], ER[3];
+
+                prim_to_E(cL->prim, EL, xL);
+                prim_to_E(cC->prim, EC, xC);
+                prim_to_E(cR->prim, ER, xR);
+
+                double x[] = {rf, cL->piph, z};
+
+                double BrC = cC->prim[BRR];
+                double BrL = cL->prim[BRR];
+                double BrR = cR->prim[BRR];
+
+                // Re-orient to put all phi's on same branch.
+                xL[1] = x[1] + get_signed_dp(xL[1], x[1]);
+                xC[1] = x[1] + get_signed_dp(xC[1], x[1]);
+                xR[1] = x[1] + get_signed_dp(xR[1], x[1]);
+
+                // Need to build a 2nd order estimate of Ez at this edge.
+                // First attempt: treat r and phi as orthogonal 2d coords,
+                //    form planar approx of Ez.
+
+                // Using "dx" and "dA" here but these are not really areas.
+                // But fine to 2nd order! (I think :p)
+                double dxL = xL[0] - xC[0];
+                double dyL = xL[1] - xC[1];
+                double dxR = xR[0] - xC[0];
+                double dyR = xR[1] - xC[1];
+                double dx = x[0] - xC[0];
+                double dy = x[1] - xC[1];
+
+                double dA = dxL * dyR - dyL * dxR;
+
+                double Ez_cells_avg = EC[2] 
+                                + ((dx*dyR - dy*dxR) * (EL[2]-EC[2]) 
+                                +  (dxL*dy - dyL*dx) * (ER[2]-EC[2])) / dA;
+                double Br_cells_avg = BrC
+                                + ((dx*dyR - dy*dxR) * (BrL-BrC) 
+                                +  (dxL*dy - dyL*dx) * (BrR-BrC)) / dA;
+
+                cL->E[idx_EB_L] = 2 * cL->E[idx_EB_L] - Ez_cells_avg;
+                cR->E[idx_EB_R] = 2 * cR->E[idx_EB_R] - Ez_cells_avg;
+                cL->B[idx_EB_L] = 2 * cL->B[idx_EB_L] - Br_cells_avg;
+                cR->B[idx_EB_R] = 2 * cR->B[idx_EB_R] - Br_cells_avg;
+            }
+        }
+    }
+
+#if NUM_EDGES == 8
+
+    int *fI_z  = theDomain->fIndex_z;
+    struct face *theFaces_z = theDomain->theFaces_2;
+    int Nfz = Nz - 1;
+
+    kmin = NgZa == 0 ? 0 : NgZa - 1;
+    kmax = NgZb == 0 ? Nz-1 : Nz - NgZb;
+    jmin = NgRa;
+    jmax = Nr - NgRb;
+
+    for(k=kmin; k<kmax; k++)
+    {
+        // k is lower annulus, k+1 the upper.
+        double zmm = theDomain->z_kph[k-1];
+        double zpp = theDomain->z_kph[k+1];
+        double zf = theDomain->z_kph[k];
+
+        double zm = get_centroid(zf, zmm, 2); // z of upper annulus
+        double zp = get_centroid(zpp, zf, 2); // z of lower annulus
+
+        int j;
+        for(j=jmin; j<jmax; j++)
+        {
+            double rm = theDomain->r_jph[j-1];
+            double rp = theDomain->r_jph[j];
+            double r = get_centroid(rp, rm, 1);
+
+            int JK = j + Nfz * k;
+
+            int f;
+            for(f=fI_z[JK]; f<fI_z[JK+1]; f++)
+            {
+                //Looping over faces.  fp is the next face.
+                int fp = f < fI_z[JK+1]-1 ? f+1 : fI_z[JK];
+
+                // cell C is shared by the faces. L & R on the other side.
+                struct cell *cC = NULL;
+                struct cell *cL = NULL;
+                struct cell *cR = NULL;
+
+                double zC = 0;
+                double zLR = 0;
+
+                int idx_EB_L = 0;
+                int idx_EB_R = 0;
+
+                if(theFaces_z[f].L == theFaces_z[fp].L)
+                { 
+                    cC = theFaces_z[f].L;
+                    cL = theFaces_z[f].R;
+                    cR = theFaces_z[fp].R;
+                    zC = zm;
+                    zLR = zp;
+                    idx_EB_L = 4;
+                    idx_EB_R = 6;
+                }
+                else if(theFaces_z[f].R == theFaces_z[fp].R)
+                {
+                    cC = theFaces_z[f].R;
+                    cL = theFaces_z[f].L;
+                    cR = theFaces_z[fp].L;
+                    zC = zp;
+                    zLR = zm;
+                    idx_EB_L = 5;
+                    idx_EB_R = 7;
+                }
+                else
+                {
+                    fprintf(stderr, "Faces don't share a cell!\n");
+                }
+
+                double xC[] = {r, cC->piph - 0.5*cC->dphi, zC};
+                double xL[] = {r, cL->piph - 0.5*cL->dphi, zLR};
+                double xR[] = {r, cR->piph - 0.5*cR->dphi, zLR};
+
+                double EL[3], EC[3], ER[3];
+
+                prim_to_E(cL->prim, EL, xL);
+                prim_to_E(cC->prim, EC, xC);
+                prim_to_E(cR->prim, ER, xR);
+
+                double x[] = {r, cL->piph, zf};
+
+                double BzC = cC->prim[BZZ];
+                double BzL = cL->prim[BZZ];
+                double BzR = cR->prim[BZZ];
+
+                // Re-orient to put all phi's on same branch.
+                xL[1] = x[1] + get_signed_dp(xL[1], x[1]);
+                xC[1] = x[1] + get_signed_dp(xC[1], x[1]);
+                xR[1] = x[1] + get_signed_dp(xR[1], x[1]);
+
+                // Need to build a 2nd order estimate of Ez at this edge.
+                // First attempt: treat r and phi as orthogonal 2d coords,
+                //    form planar approx of Ez.
+
+                // Using "dx" and "dA" here but these are not really areas.
+                // But fine to 2nd order! (I think :p)
+                double dxL = xL[2] - xC[2];
+                double dyL = xL[1] - xC[1];
+                double dxR = xR[2] - xC[2];
+                double dyR = xR[1] - xC[1];
+                double dx = x[2] - xC[2];
+                double dy = x[1] - xC[1];
+
+                double dA = dxL * dyR - dyL * dxR;
+
+                double Er_cells_avg = EC[0] 
+                                + ((dx*dyR - dy*dxR) * (EL[0]-EC[0]) 
+                                +  (dxL*dy - dyL*dx) * (ER[0]-EC[0])) / dA;
+                double Bz_cells_avg = BzC
+                                + ((dx*dyR - dy*dxR) * (BzL-BzC) 
+                                +  (dxL*dy - dyL*dx) * (BzR-BzC)) / dA;
+
+                cL->E[idx_EB_L] = 2 * cL->E[idx_EB_L] - Er_cells_avg;
+                cR->E[idx_EB_R] = 2 * cR->E[idx_EB_R] - Er_cells_avg;
+                cL->B[idx_EB_L] = 2 * cL->B[idx_EB_L] - Bz_cells_avg;
+                cR->B[idx_EB_R] = 2 * cR->B[idx_EB_R] - Bz_cells_avg;
+            }
+        }
+    }
+#endif
+
+
+
+    /*
+    double phi_max = theDomain->phi_max;
+
+    int I0[Nr*Nz];
+    for(k=0; k<Nz; k++)
+        for(j=0; j<Nr; j++)
+        {
+            int jk = j + Nr*k;
+            I0[jk] = 0;
+            for(i=0; i<Np[jk]; i++)
+            {
+                int im = (i == 0) ? Np[jk]-1 : i - 1;
+
+                double piph = get_dp(theCells[jk][i].piph, 0.0);
+                double pimh = get_dp(theCells[jk][im].piph, 0.0);
+                if(piph > 0.0 && pimh <= 0.0)
+                {
+                    I0[jk] = i;
+                    break;
+                }
+            }
+        }
+
+    for(k=NgZa; k<Nz-NgZb; k++)
+    {
+        for(j=0; j<Nr-1; j++)
+        {
+            int jkL = j + Nr*k;
+            int jkR = j+1 + Nr*k;
+
+            int iL = I0[jkL];
+            int iR = I0[jkR];
+
+            int count;
+            for(count=0; count < Np[jkL]+Np[jkR]; count++)
+            {
+                
+            }
+        }
+    }
+    */
+
+
+
+
 }
 
 void subtract_advective_B_fluxes( struct domain * theDomain ){
@@ -839,7 +1183,6 @@ void flip_fluxes( struct domain * theDomain , int dim ){
 
 }
 
-void add_E_phi( double * , double * , double * , double * , double );
 
 int phi_switch( double dphi , double Pmax , int mode ){
     // Returns "sign" of dphi, taking periodicity into account
@@ -969,12 +1312,10 @@ void make_edge_adjust( struct domain * theDomain , double dt ){
          int iU  = I0[jkU ];
          int iUR = I0[jkUR];
          
-         /*
          double rL = get_centroid(r_jph[j],   r_jph[j-1], 1);
          double rR = get_centroid(r_jph[j+1], r_jph[j],   1);
          double zD = get_centroid(z_kph[k],   z_kph[k-1], 2);
          double zU = get_centroid(z_kph[k+1], z_kph[k],   2);
-         */
 
          int Ne = Np[jk] + Np[jkR] + Np[jkU] + Np[jkUR];
          int e;
@@ -1100,42 +1441,43 @@ void make_edge_adjust( struct domain * theDomain , double dt ){
             }
 
             // Gardiner & Stone adjustment
-            /*
-            double Ec = 0.0;
-            double dphi = get_dp(xp[1], xm[1]);
-            double phi = xp[1] - 0.5*dphi;
-            double x[3] = {xp[0], phi, xp[2]};
+            if(CT_Solver == 1)
+            {
+                double Ec = 0.0;
+                double dphi = get_dp(xp[1], xm[1]);
+                double phi = xp[1] - 0.5*dphi;
+                double x[3] = {xp[0], phi, xp[2]};
 
-            int q;
-            double prim[NUM_Q], Ecell[3];
-            // Cell c
-            double dphic = get_signed_dp(phi, c->piph-0.5*c->dphi);
-            for(q=0; q<NUM_Q; q++)
-                prim[q] = c->prim[q] + dphic * c->gradp[q];
-            prim_to_E(prim, Ecell, x);
-            Ec += (x[0]-rL)*(x[2]-zD)*Ecell[1];
-            // Cell cU
-            dphic = get_signed_dp(phi, cU->piph-0.5*cU->dphi);
-            for(q=0; q<NUM_Q; q++)
-                prim[q] = cU->prim[q] + dphic * cU->gradp[q];
-            prim_to_E(prim, Ecell, x);
-            Ec += (x[0]-rL)*(zU-x[2])*Ecell[1];
-            // Cell cR
-            dphic = get_signed_dp(phi, cR->piph-0.5*cR->dphi);
-            for(q=0; q<NUM_Q; q++)
-                prim[q] = cR->prim[q] + dphic * cR->gradp[q];
-            prim_to_E(prim, Ecell, x);
-            Ec += (rR-x[0])*(x[2]-zD)*Ecell[1];
-            // Cell cUR
-            dphic = get_signed_dp(phi, cUR->piph-0.5*cUR->dphi);
-            for(q=0; q<NUM_Q; q++)
-                prim[q] = cUR->prim[q] + dphic * cUR->gradp[q];
-            prim_to_E(prim, Ecell, x);
-            Ec += (rR-x[0])*(zU-x[2])*Ecell[1];
-            Ec /= (rR-rL)*(zU-zD);
+                int q;
+                double prim[NUM_Q], Ecell[3];
+                // Cell c
+                double dphic = get_signed_dp(phi, c->piph-0.5*c->dphi);
+                for(q=0; q<NUM_Q; q++)
+                    prim[q] = c->prim[q] + dphic * c->gradp[q];
+                prim_to_E(prim, Ecell, x);
+                Ec += (x[0]-rL)*(x[2]-zD)*Ecell[1];
+                // Cell cU
+                dphic = get_signed_dp(phi, cU->piph-0.5*cU->dphi);
+                for(q=0; q<NUM_Q; q++)
+                    prim[q] = cU->prim[q] + dphic * cU->gradp[q];
+                prim_to_E(prim, Ecell, x);
+                Ec += (x[0]-rL)*(zU-x[2])*Ecell[1];
+                // Cell cR
+                dphic = get_signed_dp(phi, cR->piph-0.5*cR->dphi);
+                for(q=0; q<NUM_Q; q++)
+                    prim[q] = cR->prim[q] + dphic * cR->gradp[q];
+                prim_to_E(prim, Ecell, x);
+                Ec += (rR-x[0])*(x[2]-zD)*Ecell[1];
+                // Cell cUR
+                dphic = get_signed_dp(phi, cUR->piph-0.5*cUR->dphi);
+                for(q=0; q<NUM_Q; q++)
+                    prim[q] = cUR->prim[q] + dphic * cUR->gradp[q];
+                prim_to_E(prim, Ecell, x);
+                Ec += (rR-x[0])*(zU-x[2])*Ecell[1];
+                Ec /= (rR-rL)*(zU-zD);
 
-            E = 2*E-Ec;  //Gardiner & Stone adjustment (their Ez0 scheme)
-            */
+                E = 2*E-Ec;  //Gardiner & Stone adjustment (their Ez0 scheme)
+            }
             
 
             double dl = get_dL( xp , xm , 0 );

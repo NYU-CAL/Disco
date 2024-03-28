@@ -10,6 +10,9 @@
 #include "riemann.h"
 #include "sink.h"
 #include "output.h"
+#if CT_MODE > 0
+#include "bfields.h"
+#endif
 
 void setICparams( struct domain * );
 void setHlldParams( struct domain * );
@@ -143,6 +146,9 @@ void setupDomain( struct domain * theDomain ){
    setHydroParams( theDomain );
    setRiemannParams( theDomain );
    setHlldParams( theDomain );
+#if CT_MODE > 0
+   setBfieldsParams(theDomain);
+#endif
    setOmegaParams( theDomain );
    setRotFrameParams( theDomain );
    setMetricParams( theDomain );
@@ -160,9 +166,6 @@ void calc_dp( struct domain * );
 void set_cell_xyz( struct domain * );
 void set_wcell( struct domain * );
 void adjust_gas( struct planet * , double * , double * , double );
-#if CT_MODE > 0
-void set_B_fields( struct domain * );
-#endif
 void subtract_omega( double * );
 void addNoise(double *prim, double *x);
 void exchangeData(struct domain *, int);
