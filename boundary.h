@@ -46,6 +46,11 @@ void boundary_noslip_rout( struct domain *theDomain);
 void boundary_noslip_zbot( struct domain *theDomain);
 void boundary_noslip_ztop( struct domain *theDomain);
 
+void boundary_fixed_rinn_zrange(struct domain *theDomain, double za, double zb);
+void boundary_fixed_rout_zrange(struct domain *theDomain, double za, double zb);
+void boundary_fixed_zbot_rrange(struct domain *theDomain, double ra, double rb);
+void boundary_fixed_ztop_rrange(struct domain *theDomain, double ra, double rb);
+
 //Low-level routines for boundary
 void set_cell_init(struct cell *c, const double *r_jph, const double *z_kph,
                    int j, int k);

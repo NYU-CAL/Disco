@@ -1030,3 +1030,131 @@ void boundary_noslip_ztop( struct domain *theDomain)
     }
 }
 
+void boundary_fixed_rinn_zrange(struct domain *theDomain, double za, double zb)
+{
+    struct cell **theCells = theDomain->theCells;
+
+    int Nr = theDomain->Nr;
+    int Nz = theDomain->Nz;
+    int *Np = theDomain->Np;
+    int NgRa = theDomain->NgRa;
+    double *r_jph = theDomain->r_jph;
+    double *z_kph = theDomain->z_kph;
+
+    int *dim_rank = theDomain->dim_rank;
+
+    int i,j,k;
+
+    if(dim_rank[0] == 0 )
+    {
+        for(k=0; k<Nz; k++)
+        {
+            double z = get_centroid(z_kph[k], z_kph[k-1], 2);
+            if(z < za || z > zb)
+                continue;
+
+            for(j=0; j<NgRa; j++)
+            {
+                int jk = j+Nr*k;
+                for(i=0; i<Np[jk]; i++)
+                    set_cell_init(&(theCells[jk][i]), r_jph, z_kph, j, k);
+            }  
+        }
+    }
+}
+
+void boundary_fixed_rout_zrange(struct domain *theDomain, double za, double zb)
+{
+    struct cell **theCells = theDomain->theCells;
+
+    int Nr = theDomain->Nr;
+    int Nz = theDomain->Nz;
+    int *Np = theDomain->Np;
+    int NgRb = theDomain->NgRb;
+    double *r_jph = theDomain->r_jph;
+    double *z_kph = theDomain->z_kph;
+
+    int *dim_rank = theDomain->dim_rank;
+    int *dim_size = theDomain->dim_size;
+
+    int i,j,k;
+
+    if(dim_rank[0] == dim_size[0]-1)
+    {
+        for(k=0; k<Nz; k++)
+        {
+            double z = get_centroid(z_kph[k], z_kph[k-1], 2);
+            if(z < za || z > zb)
+                continue;
+
+            for(j=Nr-NgRb; j<Nr; j++)
+            {
+                int jk = j+Nr*k;
+                for(i=0; i<Np[jk]; i++)
+                    set_cell_init(&(theCells[jk][i]), r_jph, z_kph, j, k);
+            }  
+        }
+    }
+}
+
+void boundary_fixed_zbot_rrange(struct domain *theDomain, double ra, double rb)
+{
+    struct cell **theCells = theDomain->theCells;
+
+    int Nr = theDomain->Nr;
+    int *Np = theDomain->Np;
+    int NgZa = theDomain->NgZa;
+    double *r_jph = theDomain->r_jph;
+    double *z_kph = theDomain->z_kph;
+
+    int *dim_rank = theDomain->dim_rank;
+
+    int i,j,k;
+
+    if(dim_rank[1] == 0)
+    {
+        for(k=0; k<NgZa; k++)
+            for(j=0; j<Nr; j++)
+            {
+                double r = get_centroid(r_jph[j], r_jph[j-1], 1);
+                if(r < ra || r > rb)
+                    continue;
+
+                int jk = j+Nr*k;
+                for(i=0; i<Np[jk]; i++)
+                    set_cell_init(&(theCells[jk][i]), r_jph, z_kph, j, k);
+            }  
+    }
+}
+void boundary_fixed_ztop_rrange(struct domain *theDomain, double ra, double rb)
+{
+    struct cell **theCells = theDomain->theCells;
+
+    int Nr = theDomain->Nr;
+    int Nz = theDomain->Nz;
+    int *Np = theDomain->Np;
+    int NgZb = theDomain->NgZb;
+    double *r_jph = theDomain->r_jph;
+    double *z_kph = theDomain->z_kph;
+
+    int *dim_rank = theDomain->dim_rank;
+    int *dim_size = theDomain->dim_size;
+
+    int i,j,k;
+
+    if(dim_rank[1] == dim_size[1]-1)
+    {
+        for(k=Nz-NgZb; k<Nz; k++)
+            for(j=0; j<Nr; j++)
+            {
+                double r = get_centroid(r_jph[j], r_jph[j-1], 1);
+                if(r < ra || r > rb)
+                    continue;
+
+                int jk = j+Nr*k;
+                for(i=0; i<Np[jk]; i++)
+                    set_cell_init(&(theCells[jk][i]), r_jph, z_kph, j, k);
+            }  
+    }
+}
+

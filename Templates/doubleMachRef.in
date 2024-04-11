@@ -3,16 +3,16 @@
 # This file contains user-specified build options.
 
 # Build options
-INITIAL  = kh_cart
+INITIAL  = doubleMachRef
 HYDRO    = euler_cart
 GEOMETRY = cartesian
-BOUNDARY = fixed3d
+BOUNDARY = doubleMachRefBox
 OUTPUT   = h5out
 RESTART  = h5in
 PLANETS  = none
 HLLD     = hlld
 ANALYSIS = diag_none
-REPORT	 = rep_kh_cart
+REPORT	 = rep_none
 
 METRIC   = flat_rpz
 FRAME    = normal
