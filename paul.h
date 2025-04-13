@@ -158,6 +158,7 @@ struct param_list{
    double coolPar3;
    double coolPar4;
 
+   int dampType;
    int dampInnerType;
    int dampOuterType;
    int dampUpperType;
@@ -229,7 +230,6 @@ struct domain{
    double phi_max;
    int * fIndex_r;
    int * fIndex_z;
-   double dr0;
 
    time_t Wallt_init;
    int rank,size;
